@@ -1,0 +1,15 @@
+[Unit]
+Description=channel_bot (Go)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/var/www/animelar/anmelaruzb_bot
+ExecStart=/var/www/animelar/anmelaruzb_bot/channel_bot
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/www/animelar/anmelaruzb_bot/bot.log
+StandardError=append:/var/www/animelar/anmelaruzb_bot/bot.err
+
+[Install]
+WantedBy=multi-user.target
