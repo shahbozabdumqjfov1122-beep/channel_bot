@@ -17,32 +17,45 @@ func main() {
 	log.Printf("Bot authorized on account %s", bot.Self.UserName)
 
 	// Faqat shu kanal/supergroup uchun
-	allowedChannelID := int64(-1003056945596) // Kanal ID sini shu yerga yozing
+	allowedChannelID := int64(-1003056945596)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
-	var lastUserID int64    // Oxirgi yozgan foydalanuvchi ID
-	var lastMessageID int   // Oxirgi xabar ID
-	var lastUserName string // Oxirgi foydalanuvchi ismi
+	var newUsers []tgbotapi.User // Guruhga yangi qo‘shilgan foydalanuvchilar
 
-	// 3 daqiqada bir marta avtomatik reply yuboruvchi gorutina
+	// 3 daqiqada bir avtomatik javob yuboruvchi gorutina
 	go func() {
 		for {
 			time.Sleep(3 * time.Minute)
-			if lastUserID != 0 && lastMessageID != 0 {
+			for _, newUser := range newUsers {
 				reply := tgbotapi.NewMessage(allowedChannelID, "20 daqiqada yozib turamiz ⏰")
-				reply.ReplyToMessageID = lastMessageID
 				_, err := bot.Send(reply)
 				if err != nil {
 					log.Println("3 daqiqalik xabar yuborishda xato:", err)
 				} else {
-					log.Printf("Avtomatik javob yuborildi: foydalanuvchi %s", lastUserName)
+					log.Printf("Avtomatik javob yuborildi: foydalanuvchi %s", newUser.FirstName)
 				}
 			}
+			// Keyingi davr uchun ro'yxatni tozalaymiz
+			newUsers = nil
 		}
 	}()
+
+	// Komandalar va javoblar
+	var commands = map[string]string{
+		"salom":      "alik",
+		"qalay":      "yaxshi, rahmat!",
+		"nima":       "nma nma",
+		"vaqt":       "Hozirgi vaqt: " + time.Now().Format("15:04"),
+		"yordam":     "Menga yozing,@TM_ESPORTS yordam beraman!",
+		"salomlar":   "Salom, do'stim!",
+		"rahmat":     "Doimo mamnunman!",
+		"kitob":      "Qaysi kitobni o'qiyapsiz?",
+		"dasturlash": "Zo'r! Qaysi tilni ishlatyapsiz?",
+		"telegram":   "Botlar hayotingizni osonlashtiradi!",
+	}
 
 	for update := range updates {
 		if update.Message == nil {
@@ -54,7 +67,7 @@ func main() {
 			continue
 		}
 
-		// ✅ 1. Yangi foydalanuvchi kirsa — darhol xush kelibsiz desin
+		// ✅ 1. Yangi foydalanuvchi kirsa — xush kelibsiz
 		if len(update.Message.NewChatMembers) > 0 {
 			for _, newUser := range update.Message.NewChatMembers {
 				if newUser.IsBot {
@@ -70,16 +83,27 @@ func main() {
 				} else {
 					log.Printf("Yangi foydalanuvchiga xush kelibsiz yuborildi: %s", newUser.FirstName)
 				}
+
+				// Yangi foydalanuvchini avtomatik javob ro'yxatiga qo‘shamiz
+				newUsers = append(newUsers, newUser)
 			}
 			continue
 		}
 
-		// ✅ 2. Oddiy xabar — oxirgi foydalanuvchini eslab qolish
+		// ✅ 2. Oddiy xabar — buyruq tekshirish
 		if !update.Message.From.IsBot {
-			lastUserID = update.Message.From.ID
-			lastMessageID = update.Message.MessageID
-			lastUserName = update.Message.From.FirstName
-			log.Printf("Oxirgi yozgan foydalanuvchi: %s (%d)", lastUserName, lastUserID)
+			text := update.Message.Text
+			if response, ok := commands[text]; ok {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, response)
+				msg.ReplyToMessageID = update.Message.MessageID
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Println("Buyruqqa javob berishda xato:", err)
+				} else {
+					log.Printf("Foydalanuvchi %s: %s → Javob: %s",
+						update.Message.From.FirstName, text, response)
+				}
+			}
 		}
 	}
 }
