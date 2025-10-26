@@ -46,6 +46,7 @@ func main() {
 	}
 	// Komandalar va javoblar
 	commands := map[string]string{
+
 		"salom":                             "alik",
 		"Salom":                             "alik",
 		"SALOM":                             "alik",
@@ -76,7 +77,6 @@ func main() {
 		"soat nechi":                        "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
 		"soat nechida":                      "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
 		"soat nechi da":                     "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
-		"soatnechi":                         "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
 		"soatnechida":                       "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
 		"Ok":                                "yahshi",
 		"ok":                                "yahshi",
@@ -510,7 +510,7 @@ func main() {
 		"hmm":                          "hmm... qiziq 😏",
 		"Tinchli":                      "tinch, o‘zingchi?",
 		"Blaaa harom🗿🦶🏿":               "asta 😂",
-		"Necinci yilsz":                "2011 😎",
+		"Necinci yilsz":                "sir 😎",
 		"Aot yahshimi demon slayer mi": "ikkalasi ham zo‘r 🔥",
 		"Da nima gaplar":               "tinchlik o‘zizda?",
 		"Man bn teng ekansz":           "ha, bir avlodmiz demak 😁",
@@ -575,7 +575,29 @@ func main() {
 		"tosh-qaychi-qog'oz":         "boshladik o‘yinni ✊✋✌️",
 		"Tosh-qaychi-qog'oz":         "boshladik o‘yinni ✊✋✌️",
 		"o'yin yakunlandi!":          "zo‘r o‘yin bo‘ldi 🎮",
+		"Nma":                        "hech narsa",
+		"ama":                        "hech narsa",
+		"NMA":                        "hech narsa",
+		"Dnx":                        "So'kin ma",
+		"DNX":                        "So'kin ma",
+		"dnx":                        "So'kin ma",
+		"sikaman":                    "So'kin ma",
+		"Sikaman":                    "So'kin ma",
+		"SIKAMAN":                    "So'kin ma",
+		"pashol naxoy":               "So'kin ma",
+		"Pashol naxoy":               "So'kin ma",
+		"pashol":                     "So'kin ma",
+		"Pashol":                     "So'kin ma",
+		"kot":                        "So'kin ma",
+		"Ko't":                       "So'kin ma",
+		"naxoy":                      "So'kin ma",
+		"Naxoy":                      "So'kin ma",
+		"qanday":                     "zor ",
+		"Qanday":                     "zor ",
+		"qonday":                     "zor",
+		"Qonday":                     "zor",
 	}
+
 	for update := range updates {
 		if update.Message == nil {
 			continue
