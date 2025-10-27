@@ -16,37 +16,46 @@ func main() {
 	bot.Debug = true
 	log.Printf("Bot authorized on account %s", bot.Self.UserName)
 
-	// Faqat shu kanal/supergroup uchun
-	allowedChannelID := int64(-1003056945596)
+	// ✅ 2 ta kanal/supergroup ID
+	allowedChannelIDs := []int64{
+		-1003056945596, // 1-kanal
+		-1002328747274, // 2-kanal (shu joyga o'z ID’ingni yoz)
+	}
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
 	var newUsers []tgbotapi.User
+
+	// 🕒 Har 3 daqiqada avtomatik xabar yuboruvchi gorutina
 	go func() {
 		for {
 			time.Sleep(3 * time.Minute)
 			for _, newUser := range newUsers {
-				reply := tgbotapi.NewMessage(allowedChannelID, "yozib turamiz")
-				_, err := bot.Send(reply)
-				if err != nil {
-					log.Println("3 daqiqalik xabar yuborishda xato:", err)
-				} else {
-					log.Printf("Avtomatik javob yuborildi: foydalanuvchi %s", newUser.FirstName)
+				for _, chatID := range allowedChannelIDs {
+					reply := tgbotapi.NewMessage(chatID, "yozib turamiz")
+					_, err := bot.Send(reply)
+					if err != nil {
+						log.Printf("Xabar yuborishda xato (%d): %v", chatID, err)
+					} else {
+						log.Printf("Avtomatik javob yuborildi: foydalanuvchi %s, kanal: %d", newUser.FirstName, chatID)
+					}
 				}
 			}
 			newUsers = nil
 		}
 	}()
+
+	// 🕐 Tashkent vaqti uchun timezone
 	loc, err := time.LoadLocation("Asia/Tashkent")
 	if err != nil {
 		log.Println("Vaqt zonasi yuklanmadi, default UTC ishlatiladi")
 		loc = time.UTC
 	}
-	// Komandalar va javoblar
-	commands := map[string]string{
 
+	// 💬 Komandalar va javoblar
+	commands := map[string]string{
 		"salom":                             "alik",
 		"Salom":                             "alik",
 		"SALOM":                             "alik",
@@ -54,8 +63,8 @@ func main() {
 		"qalay":                             "yaxshi, rahmat!",
 		"Qalay":                             "yaxshi, rahmat!",
 		"nima":                              "nma nma",
-		"NIMA":                              "nma nma",
 		"Nima":                              "nma nma",
+		"NIMA":                              "nma nma",
 		"nima gap":                          "tinchlik",
 		"NIMA GAP":                          "tinchlik",
 		"qale":                              "zor ozingchi",
@@ -598,13 +607,21 @@ func main() {
 		"Qonday":                     "zor",
 	}
 
+	// 🔄 Asosiy update sikli
 	for update := range updates {
 		if update.Message == nil {
 			continue
 		}
 
-		// Faqat ruxsat berilgan kanal/supergroup
-		if update.Message.Chat.ID != allowedChannelID {
+		// faqat ruxsat etilgan kanallardan xabar qabul qilish
+		allowed := false
+		for _, id := range allowedChannelIDs {
+			if update.Message.Chat.ID == id {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
 			continue
 		}
 
@@ -616,7 +633,7 @@ func main() {
 				}
 
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID,
-					"Salom "+newUser.FirstName+"! Kanalga xush kelibsiz 🎉\n!")
+					"Salom "+newUser.FirstName+"! Kanalga xush kelibsiz 🎉")
 				msg.ReplyToMessageID = update.Message.MessageID
 				_, err := bot.Send(msg)
 				if err != nil {
@@ -625,7 +642,7 @@ func main() {
 					log.Printf("Yangi foydalanuvchiga xush kelibsiz yuborildi: %s", newUser.FirstName)
 				}
 
-				// Yangi foydalanuvchini avtomatik javob ro'yxatiga qo‘shamiz
+				// avtomatik javob ro‘yxatiga qo‘shish
 				newUsers = append(newUsers, newUser)
 			}
 			continue
