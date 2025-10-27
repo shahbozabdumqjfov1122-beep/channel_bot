@@ -19,7 +19,7 @@ func main() {
 	// ✅ 2 ta kanal/supergroup ID
 	allowedChannelIDs := []int64{
 		-1003056945596, // 1-kanal
-		-1007534335386, // 2-kanal (shu joyga o'z ID’ingni yoz)
+		-1002338872199, // 2-kanal (shu joyga o'z ID’ingni yoz)
 	}
 
 	u := tgbotapi.NewUpdate(0)
