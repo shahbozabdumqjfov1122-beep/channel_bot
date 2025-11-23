@@ -5,13 +5,14 @@ import (
 	"html"
 	"log"
 	"strconv"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func main() {
-	const BOT_TOKEN = "8497820416:AAHgn1eNAqeULkiICiq7Aa9OgjX0Hin-B5c"
-	const ADMIN_USERNAME = "TM_ESPORTS" // admin username bilan tekshirish
+	const BOT_TOKEN = "8497820416:AAH6MELB1Egn4ORRxH2iITVty_nTvOltGJM"
+	const ADMIN_USERNAME = "TM_ESPORTS"
 
 	bot, err := tgbotapi.NewBotAPI(BOT_TOKEN)
 	if err != nil {
@@ -40,16 +41,22 @@ func main() {
 
 		// CALLBACK BOSILGANDA
 		if update.CallbackQuery != nil {
-			data := update.CallbackQuery.Data
-			bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, "")) // loadingni o'chiradi
 
+			data := update.CallbackQuery.Data
+			bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, "")) // loadingni o‘chiradi
+
+			// ➕ Kanal qo‘shish bosilganda
 			if data == "add" {
-				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "📌 Kanal nomini yuboring va ID formatida yozing: KanalNomi;-100123456789")
+				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID,
+					"📌 Kanal qo‘shish uchun shu formatda yozing:\n\nKanalNomi;-100123456789",
+				)
 				bot.Send(msg)
 				continue
 			}
 
+			// ➖ Kanal o‘chirish bosilganda
 			if data == "remove" {
+
 				if len(channels) == 0 {
 					bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "❌ Hali kanal yo‘q"))
 					continue
@@ -70,8 +77,9 @@ func main() {
 				continue
 			}
 
-			if len(data) > 4 && data[:4] == "del_" {
-				idStr := data[4:]
+			// delete tugmasi
+			if strings.HasPrefix(data, "del_") {
+				idStr := strings.TrimPrefix(data, "del_")
 				id, _ := strconv.ParseInt(idStr, 10, 64)
 				delete(channels, id)
 				bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "✅ Kanal o‘chirildi"))
@@ -82,7 +90,7 @@ func main() {
 		// TEXT XABARLAR
 		if update.Message != nil {
 
-			// /start komandasi (admin uchun)
+			// /start komandasi
 			if update.Message.Text == "/start" {
 				if update.Message.From.UserName != ADMIN_USERNAME {
 					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Siz admin emassiz!"))
@@ -95,44 +103,65 @@ func main() {
 				continue
 			}
 
-			// Admin inline qo‘shish formati: "KanalNomi;-100123456789"
+			// Admin kanal qo‘shishi — format: KanalNomi;-100123456789
 			if update.Message.From.UserName == ADMIN_USERNAME {
+
 				text := update.Message.Text
-				if len(text) > 0 && update.Message.Text != "/start" {
-					parts := make([]string, 2)
-					if n, _ := fmt.Sscanf(text, "%[^;];%s", &parts[0], &parts[1]); n == 2 {
-						id, err := strconv.ParseInt(parts[1], 10, 64)
-						if err == nil {
-							channels[id] = parts[0]
-							bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("✅ Kanal qo‘shildi: %s (%d)", parts[0], id)))
-						} else {
+
+				if strings.Contains(text, ";") {
+					parts := strings.SplitN(text, ";", 2)
+					if len(parts) == 2 {
+
+						name := parts[0]
+						idStr := parts[1]
+
+						id, err := strconv.ParseInt(idStr, 10, 64)
+						if err != nil {
 							bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ ID noto‘g‘ri!"))
+							continue
 						}
+
+						channels[id] = name
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID,
+							fmt.Sprintf("✅ Kanal qo‘shildi: %s (%d)", name, id)))
+						continue
 					}
 				}
 			}
 
-			// Kanal ro'yxatida foydalanuvchi xabari bo‘lsa — xush kelibsiz
+			// Guruhga yangi odam kirsa — xush kelibsiz
 			chatID := update.Message.Chat.ID
 			if _, ok := channels[chatID]; ok {
+
 				if len(update.Message.NewChatMembers) > 0 {
+
 					for _, user := range update.Message.NewChatMembers {
+
 						if user.IsBot {
 							continue
 						}
+
 						var msg tgbotapi.MessageConfig
+
 						if user.UserName != "" {
-							msg = tgbotapi.NewMessage(chatID, "Salom @"+user.UserName+"! Xush kelibsiz 🎉")
+							msg = tgbotapi.NewMessage(chatID,
+								"Salom @"+user.UserName+"! Xush kelibsiz 🎉")
+
 						} else {
 							name := html.EscapeString(user.FirstName)
-							txt := fmt.Sprintf("Salom <a href=\"tg://user?id=%d\">%s</a>! Xush kelibsiz 🎉", user.ID, name)
+							txt := fmt.Sprintf(
+								"Salom <a href=\"tg://user?id=%d\">%s</a>! Xush kelibsiz 🎉",
+								user.ID, name,
+							)
 							msg = tgbotapi.NewMessage(chatID, txt)
 							msg.ParseMode = "HTML"
 						}
+
 						bot.Send(msg)
 					}
 				}
 			}
+
 		}
 	}
 }
