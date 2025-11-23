@@ -18,11 +18,8 @@ func main() {
 	bot.Debug = true
 	log.Printf("Bot authorized on account %s", bot.Self.UserName)
 
-	// 2 ta kanal ID
-	allowedChannelIDs := []int64{
-		-1003316396409, // 1-kanal
-		-1002338872199, // 2-kanal
-	}
+	// Faqat shu kanal uchun
+	allowedChannelID := int64(-1003316396409)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -32,49 +29,36 @@ func main() {
 	var lastMessageID int
 	var lastUserName string
 
-	// ---------------------------
-	// 🔥 3 daqiqada avtomatik reply
-	// ---------------------------
+	// 3 daqiqada avtomatik javob yuboruvchi gorutina
 	go func() {
 		for {
 			time.Sleep(3 * time.Minute)
-
 			if lastUserID != 0 && lastMessageID != 0 {
-				for _, chatID := range allowedChannelIDs {
-					reply := tgbotapi.NewMessage(chatID, "yozib turamiz ⏰")
-					reply.ReplyToMessageID = lastMessageID
-					bot.Send(reply)
+				reply := tgbotapi.NewMessage(allowedChannelID, "yozib turamiz ⏰")
+				reply.ReplyToMessageID = lastMessageID
+				_, err := bot.Send(reply)
+				if err != nil {
+					log.Println("3 daqiqalik xabar yuborishda xato:", err)
+				} else {
+					log.Printf("Avtomatik javob yuborildi: foydalanuvchi %s", lastUserName)
 				}
 			}
 		}
 	}()
 
-	// ---------------------------
-	// 🔥 Asosiy bot sikli
-	// ---------------------------
 	for update := range updates {
 		if update.Message == nil {
 			continue
 		}
 
-		// Faqat ruxsat berilgan kanallar
-		allowed := false
-		for _, id := range allowedChannelIDs {
-			if update.Message.Chat.ID == id {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
+		// Faqat shu kanal
+		if update.Message.Chat.ID != allowedChannelID {
 			continue
 		}
 
-		// ----------------------------------------
-		// 🔥 1. Yangi foydalanuvchi kirsa — WELCOME
-		// ----------------------------------------
+		// Yangi foydalanuvchi kirsa — xush kelibsiz
 		if len(update.Message.NewChatMembers) > 0 {
 			for _, newUser := range update.Message.NewChatMembers {
-
 				if newUser.IsBot {
 					continue
 				}
@@ -82,15 +66,15 @@ func main() {
 				var msg tgbotapi.MessageConfig
 
 				if newUser.UserName != "" {
-					// @username bilan, parse mode yo'q
+					// Username bo'lsa — plain text @username (bu avtomatik kliklanadi)
 					text := "Salom @" + newUser.UserName + "! Kanalga xush kelibsiz 🎉"
 					msg = tgbotapi.NewMessage(update.Message.Chat.ID, text)
+					// Hech qanday ParseMode qo'ymaymiz — shunda "_" va boshqa belgilar parse xatosiga sabab bo'lmaydi
 				} else {
-					// Username bo‘lmasa — HTML mention
-					escaped := html.EscapeString(newUser.FirstName)
-					htmlText := fmt.Sprintf(
-						"Salom <a href=\"tg://user?id=%d\">%s</a>! Kanalga xush kelibsiz 🎉",
-						newUser.ID, escaped)
+					// Username yo'q bo'lsa — HTML mention orqali clickable qilib qo'yamiz
+					// FirstName ni html.EscapeString bilan himoyalaymiz
+					escapedName := html.EscapeString(newUser.FirstName)
+					htmlText := fmt.Sprintf("Salom <a href=\"tg://user?id=%d\">%s</a>! Kanalga xush kelibsiz 🎉", newUser.ID, escapedName)
 					msg = tgbotapi.NewMessage(update.Message.Chat.ID, htmlText)
 					msg.ParseMode = "HTML"
 				}
@@ -101,25 +85,18 @@ func main() {
 				if err != nil {
 					log.Println("Xush kelibsiz xabar yuborishda xato:", err)
 				} else {
-					log.Printf("Welcome yuborildi: %s", newUser.FirstName)
+					log.Printf("Yangi foydalanuvchi uchun xush kelibsiz yuborildi: %v", newUser.UserName)
 				}
-
-				// oxirgi userni eslab qolish
-				lastUserID = newUser.ID
-				lastMessageID = update.Message.MessageID
-				lastUserName = newUser.FirstName
 			}
 			continue
 		}
 
-		// ----------------------------------------
-		// 🔥 2. Oddiy xabar yozgan userni eslab qolish
-		// ----------------------------------------
+		// Oddiy xabar — oxirgi foydalanuvchini eslab qolish
 		if !update.Message.From.IsBot {
 			lastUserID = update.Message.From.ID
 			lastMessageID = update.Message.MessageID
 			lastUserName = update.Message.From.FirstName
-			log.Printf("Oxirgi yozgan: %s (%d)", lastUserName, lastUserID)
+			log.Printf("Oxirgi yozgan foydalanuvchi: %s (%d)", lastUserName, lastUserID)
 		}
 	}
 }
