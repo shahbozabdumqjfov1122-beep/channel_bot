@@ -5,44 +5,24 @@ import (
 	"html"
 	"log"
 	"strconv"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func main() {
+	const BOT_TOKEN = "8497820416:AAHgn1eNAqeULkiICiq7Aa9OgjX0Hin-B5c"
+	const ADMIN_USERNAME = "TM_ESPORTS" // admin username bilan tekshirish
 
-	bot, err := tgbotapi.NewBotAPI("8497820416:AAHgn1eNAqeULkiICiq7Aa9OgjX0Hin-B5c")
+	bot, err := tgbotapi.NewBotAPI(BOT_TOKEN)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	bot.Debug = true
+	log.Printf("Bot authorized on account %s", bot.Self.UserName)
 
-	// Admin sozlamalari
-	adminID := int64(6649453730)
-	adminUsername := "TM_ESPORTS"
-
-	// Kanal ro'yxati (map)
+	// Kanal ro'yxati
 	channels := make(map[int64]string)
-
-	// Oxirgi foydalanuvchi
-	var lastUserID int64
-	var lastUserName string
-
-	// 3 daqiqa log
-	go func() {
-		for {
-			time.Sleep(3 * time.Minute)
-			if lastUserID != 0 {
-				log.Printf("3 daqiqa o'tdi — Oxirgi yozgan: %s (%d)", lastUserName, lastUserID)
-			}
-		}
-	}()
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := bot.GetUpdatesChan(u)
 
 	// Admin panel tugmalari
 	adminMenu := tgbotapi.NewInlineKeyboardMarkup(
@@ -52,37 +32,30 @@ func main() {
 		),
 	)
 
-	var waitingChannelName bool
-	var waitingChannelID bool
-	var tempChannelName string
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+	updates := bot.GetUpdatesChan(u)
 
 	for update := range updates {
 
 		// CALLBACK BOSILGANDA
 		if update.CallbackQuery != nil {
-
 			data := update.CallbackQuery.Data
+			bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, "")) // loadingni o'chiradi
 
-			// Callbackga javob (loadingni o'chiradi)
-			bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
-
-			// ➕ Kanal qo'shish bosilganda
 			if data == "add" {
-				waitingChannelName = true
-				bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "📌 Kanal nomini yuboring:"))
+				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "📌 Kanal nomini yuboring va ID formatida yozing: KanalNomi;-100123456789")
+				bot.Send(msg)
 				continue
 			}
 
-			// ➖ Kanal o'chirish bosilganda
 			if data == "remove" {
-
 				if len(channels) == 0 {
 					bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "❌ Hali kanal yo‘q"))
 					continue
 				}
 
 				var rows [][]tgbotapi.InlineKeyboardButton
-
 				for id, name := range channels {
 					btn := tgbotapi.NewInlineKeyboardButtonData(
 						fmt.Sprintf("%s (%d)", name, id),
@@ -97,7 +70,6 @@ func main() {
 				continue
 			}
 
-			// delete tugmasi
 			if len(data) > 4 && data[:4] == "del_" {
 				idStr := data[4:]
 				id, _ := strconv.ParseInt(idStr, 10, 64)
@@ -110,60 +82,45 @@ func main() {
 		// TEXT XABARLAR
 		if update.Message != nil {
 
-			// /admin komandasi
-			if update.Message.Text == "/admin" {
-				if update.Message.From.ID != adminID {
+			// /start komandasi (admin uchun)
+			if update.Message.Text == "/start" {
+				if update.Message.From.UserName != ADMIN_USERNAME {
 					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Siz admin emassiz!"))
 					continue
 				}
 
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("🛠 Admin Panel — @%s", adminUsername))
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("🛠 Admin Panel — @%s", ADMIN_USERNAME))
 				msg.ReplyMarkup = adminMenu
 				bot.Send(msg)
 				continue
 			}
 
-			// Admin kanal qo‘shyapti
-			if update.Message.From.ID == adminID {
-
-				// 1) Kanal nomini kutyapmiz
-				if waitingChannelName {
-					tempChannelName = update.Message.Text
-					waitingChannelName = false
-					waitingChannelID = true
-					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "📌 Kanal ID sini yuboring (-100...)"))
-					continue
-				}
-
-				// 2) Kanal ID ni kutyapmiz
-				if waitingChannelID {
-					id, err := strconv.ParseInt(update.Message.Text, 10, 64)
-					if err != nil {
-						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ ID xato!"))
-						continue
+			// Admin inline qo‘shish formati: "KanalNomi;-100123456789"
+			if update.Message.From.UserName == ADMIN_USERNAME {
+				text := update.Message.Text
+				if len(text) > 0 && update.Message.Text != "/start" {
+					parts := make([]string, 2)
+					if n, _ := fmt.Sscanf(text, "%[^;];%s", &parts[0], &parts[1]); n == 2 {
+						id, err := strconv.ParseInt(parts[1], 10, 64)
+						if err == nil {
+							channels[id] = parts[0]
+							bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("✅ Kanal qo‘shildi: %s (%d)", parts[0], id)))
+						} else {
+							bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ ID noto‘g‘ri!"))
+						}
 					}
-					channels[id] = tempChannelName
-					waitingChannelID = false
-					tempChannelName = ""
-					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "✅ Kanal qo‘shildi"))
-					continue
 				}
 			}
 
-			// HOZIRGI CHAT kanal ro‘yxatida bormi?
+			// Kanal ro'yxatida foydalanuvchi xabari bo‘lsa — xush kelibsiz
 			chatID := update.Message.Chat.ID
 			if _, ok := channels[chatID]; ok {
-
-				// Yangi user qo'shilsa
 				if len(update.Message.NewChatMembers) > 0 {
 					for _, user := range update.Message.NewChatMembers {
-
 						if user.IsBot {
 							continue
 						}
-
 						var msg tgbotapi.MessageConfig
-
 						if user.UserName != "" {
 							msg = tgbotapi.NewMessage(chatID, "Salom @"+user.UserName+"! Xush kelibsiz 🎉")
 						} else {
@@ -172,15 +129,8 @@ func main() {
 							msg = tgbotapi.NewMessage(chatID, txt)
 							msg.ParseMode = "HTML"
 						}
-
 						bot.Send(msg)
 					}
-				}
-
-				// Oxirgi foydalanuvchini eslab qolish
-				if !update.Message.From.IsBot {
-					lastUserID = update.Message.From.ID
-					lastUserName = update.Message.From.FirstName
 				}
 			}
 		}
