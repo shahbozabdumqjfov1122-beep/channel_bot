@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+
 	bot, err := tgbotapi.NewBotAPI("TOKENINGIZNI_BU_YERGA_QOYING")
 	if err != nil {
 		log.Panic(err)
@@ -18,23 +19,23 @@ func main() {
 
 	bot.Debug = true
 
-	// Admin ID va username
+	// Admin sozlamalari
 	adminID := int64(6649453730)
 	adminUsername := "TM_ESPORTS"
 
-	// Admin qo‘shgan kanallar
+	// Kanal ro'yxati (map)
 	channels := make(map[int64]string)
 
 	// Oxirgi foydalanuvchi
 	var lastUserID int64
 	var lastUserName string
 
-	// 3 daqiqa log tekshiruv
+	// 3 daqiqa log
 	go func() {
 		for {
 			time.Sleep(3 * time.Minute)
 			if lastUserID != 0 {
-				log.Printf("3 daqiqa o‘tdi. Oxirgi yozgan: %s (%d)", lastUserName, lastUserID)
+				log.Printf("3 daqiqa o'tdi — Oxirgi yozgan: %s (%d)", lastUserName, lastUserID)
 			}
 		}
 	}()
@@ -57,33 +58,46 @@ func main() {
 
 	for update := range updates {
 
-		// CALLBACK HANDLER
+		// CALLBACK BOSILGANDA
 		if update.CallbackQuery != nil {
 
 			data := update.CallbackQuery.Data
 
+			// Callbackga javob (loadingni o'chiradi)
+			bot.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
+
+			// ➕ Kanal qo'shish bosilganda
 			if data == "add" {
 				waitingChannelName = true
 				bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "📌 Kanal nomini yuboring:"))
 				continue
 			}
 
+			// ➖ Kanal o'chirish bosilganda
 			if data == "remove" {
+
 				if len(channels) == 0 {
 					bot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "❌ Hali kanal yo‘q"))
 					continue
 				}
 
 				var rows [][]tgbotapi.InlineKeyboardButton
+
 				for id, name := range channels {
-					btn := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%s (%d)", name, id), "del_"+strconv.FormatInt(id, 10))
+					btn := tgbotapi.NewInlineKeyboardButtonData(
+						fmt.Sprintf("%s (%d)", name, id),
+						"del_"+strconv.FormatInt(id, 10),
+					)
 					rows = append(rows, []tgbotapi.InlineKeyboardButton{btn})
 				}
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("🛠 Admin Panel — @%s", adminUsername))
-				msg.ReplyMarkup = adminMenu
+
+				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "Qaysi kanalni o‘chirasiz?")
+				msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 				bot.Send(msg)
+				continue
 			}
 
+			// delete tugmasi
 			if len(data) > 4 && data[:4] == "del_" {
 				idStr := data[4:]
 				id, _ := strconv.ParseInt(idStr, 10, 64)
@@ -93,25 +107,26 @@ func main() {
 			}
 		}
 
-		// TEXT HANDLER
+		// TEXT XABARLAR
 		if update.Message != nil {
 
-			// /admin buyruq
+			// /admin komandasi
 			if update.Message.Text == "/admin" {
 				if update.Message.From.ID != adminID {
 					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Siz admin emassiz!"))
 					continue
 				}
 
-				msgText := fmt.Sprintf("🛠 Admin Panel — @%s", adminUsername)
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgText)
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("🛠 Admin Panel — @%s", adminUsername))
 				msg.ReplyMarkup = adminMenu
 				bot.Send(msg)
 				continue
 			}
 
-			// Kanal qo‘shish jarayoni
+			// Admin kanal qo‘shyapti
 			if update.Message.From.ID == adminID {
+
+				// 1) Kanal nomini kutyapmiz
 				if waitingChannelName {
 					tempChannelName = update.Message.Text
 					waitingChannelName = false
@@ -120,6 +135,7 @@ func main() {
 					continue
 				}
 
+				// 2) Kanal ID ni kutyapmiz
 				if waitingChannelID {
 					id, err := strconv.ParseInt(update.Message.Text, 10, 64)
 					if err != nil {
@@ -134,17 +150,20 @@ func main() {
 				}
 			}
 
-			// Xush kelibsiz funksiyasi
+			// HOZIRGI CHAT kanal ro‘yxatida bormi?
 			chatID := update.Message.Chat.ID
 			if _, ok := channels[chatID]; ok {
 
+				// Yangi user qo'shilsa
 				if len(update.Message.NewChatMembers) > 0 {
 					for _, user := range update.Message.NewChatMembers {
+
 						if user.IsBot {
 							continue
 						}
 
 						var msg tgbotapi.MessageConfig
+
 						if user.UserName != "" {
 							msg = tgbotapi.NewMessage(chatID, "Salom @"+user.UserName+"! Xush kelibsiz 🎉")
 						} else {
@@ -161,7 +180,6 @@ func main() {
 				// Oxirgi foydalanuvchini eslab qolish
 				if !update.Message.From.IsBot {
 					lastUserID = update.Message.From.ID
-					//lastMessageID = update.Message.MessageID
 					lastUserName = update.Message.From.FirstName
 				}
 			}
