@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"html"
 	"log"
 	"time"
 
@@ -16,604 +18,46 @@ func main() {
 	bot.Debug = true
 	log.Printf("Bot authorized on account %s", bot.Self.UserName)
 
-	// ✅ 2 ta kanal/supergroup ID
+	// 2 ta kanal ID
 	allowedChannelIDs := []int64{
 		-1003316396409, // 1-kanal
-		-1002338872199, // 2-kanal (shu joyga o'z ID’ingni yoz)
+		-1002338872199, // 2-kanal
 	}
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
-	var newUsers []tgbotapi.User
+	var lastUserID int64
+	var lastMessageID int
+	var lastUserName string
 
-	// 🕒 Har 3 daqiqada avtomatik xabar yuboruvchi gorutina
+	// ---------------------------
+	// 🔥 3 daqiqada avtomatik reply
+	// ---------------------------
 	go func() {
 		for {
 			time.Sleep(3 * time.Minute)
-			for _, newUser := range newUsers {
+
+			if lastUserID != 0 && lastMessageID != 0 {
 				for _, chatID := range allowedChannelIDs {
-					reply := tgbotapi.NewMessage(chatID, "yozib turamiz")
-					_, err := bot.Send(reply)
-					if err != nil {
-						log.Printf("Xabar yuborishda xato (%d): %v", chatID, err)
-					} else {
-						log.Printf("Avtomatik javob yuborildi: foydalanuvchi %s, kanal: %d", newUser.FirstName, chatID)
-					}
+					reply := tgbotapi.NewMessage(chatID, "yozib turamiz ⏰")
+					reply.ReplyToMessageID = lastMessageID
+					bot.Send(reply)
 				}
 			}
-			newUsers = nil
 		}
 	}()
 
-	// 🕐 Tashkent vaqti uchun timezone
-	loc, err := time.LoadLocation("Asia/Tashkent")
-	if err != nil {
-		log.Println("Vaqt zonasi yuklanmadi, default UTC ishlatiladi")
-		loc = time.UTC
-	}
-
-	// 💬 Komandalar va javoblar
-	commands := map[string]string{
-		"salom":                             "alik",
-		"Salom":                             "alik",
-		"SALOM":                             "alik",
-		"alik":                              "nima gap",
-		"qalay":                             "yaxshi, rahmat!",
-		"Qalay":                             "yaxshi, rahmat!",
-		"nima":                              "nma nma",
-		"Nima":                              "nma nma",
-		"NIMA":                              "nma nma",
-		"nima gap":                          "tinchlik",
-		"NIMA GAP":                          "tinchlik",
-		"qale":                              "zor ozingchi",
-		"Qale":                              "zor ozingchi",
-		"QALE":                              "zor ozingchi",
-		"isming nima":                       "menda ism yo'q",
-		"ble":                               "nima ble!",
-		"Ble":                               "nima ble!",
-		"BLE":                               "nima ble!",
-		"Bliat":                             "nima Bliat!",
-		"bliat":                             "nima bliat!",
-		"blat":                              "nima blat!",
-		"Blat":                              "nima Blat!",
-		"zorku":                             "nim men ham bilsam bo‘ladimi",
-		"Yaxsh rahmat":                      "yahshi bolsa yahshida",
-		"Aha":                               "Aha Aha",
-		"Bilaman":                           "nam qipti shunga!",
-		"Lic":                               "aha yozdim",
-		"soat nechi":                        "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
-		"soat nechida":                      "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
-		"soat nechi da":                     "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
-		"soatnechida":                       "Hozirgi vaqt: " + time.Now().In(loc).Format("15:04"),
-		"Ok":                                "yahshi",
-		"ok":                                "yahshi",
-		"OK":                                "yahshi",
-		"oK":                                "yahshi",
-		"Yaxshi ozezchi":                    "Yaxshi rahmat",
-		"Yaxshi":                            "unda ajoyib",
-		"yaxshi":                            "unda ajoyib",
-		"Yaxshi o'zezchi":                   "Yaxshi rahmat",
-		"yaxshi ozezchi":                    "rahmat",
-		"kitob":                             "Qaysi kitobni o‘qiyapsiz?",
-		"dasturlash":                        "Zo'r! Qaysi tilni ishlatyapsiz?",
-		"python":                            "Python juda qulay!",
-		"golang":                            "Go tilida kodlash zo‘r!",
-		"javascript":                        "JS front-end uchun ajoyib",
-		"nodejs":                            "Node.js server taraf uchun ajoyib",
-		"java":                              "Java backend uchun ishlatiladi",
-		"c++":                               "C++ performans uchun ideal",
-		"html":                              "HTML web sahifalar uchun kerak",
-		"css":                               "CSS bilan sahifani chiroyli qilamiz",
-		"vaqt":                              "Hozirgi vaqt: 15:04",
-		"soat":                              "Hozirgi vaqt: 15:04",
-		"qachon":                            "Hozirgi vaqt: 15:04",
-		"yordam":                            "Menga yozing, yordam beraman!",
-		"salomlar":                          "Salom, do‘stim!",
-		"rahmat":                            "Doimo mamnunman!",
-		"nma gap":                           "Tinchlik",
-		"how are you":                       "I’m fine, thanks!",
-		"hello":                             "Hi there!",
-		"hi":                                "Hello!",
-		"good morning":                      "Good morning!",
-		"gm":                                "Good morning!",
-		"good night":                        "Sweet dreams!",
-		"gn":                                "Good night!",
-		"thanks":                            "You’re welcome!",
-		"ty":                                "No problem!",
-		"bye":                               "See you later!",
-		"goodbye":                           "Bye bye!",
-		"see you":                           "See you soon!",
-		"welcome":                           "Welcome!",
-		"congrats":                          "Congratulations!",
-		"happy birthday":                    "Happy Birthday! 🎉",
-		"hb":                                "Happy Birthday! 🎉",
-		"cheers":                            "Cheers! 🥂",
-		"lol":                               "😂😂",
-		"haha":                              "😄😄",
-		"okey":                              "ok",
-		"fine":                              "Good!",
-		"cool":                              "😎",
-		"awesome":                           "👍",
-		"great":                             "🌟",
-		"bravo":                             "👏👏",
-		"amazing":                           "🔥🔥",
-		"wow":                               "😲",
-		"nice":                              "👌",
-		"perfect":                           "✅",
-		"excellent":                         "🌟🌟",
-		"yup":                               "Yes!",
-		"yeah":                              "Yes!",
-		"yes":                               "Yes!",
-		"no":                                "No!",
-		"maybe":                             "Hmm…",
-		"idk":                               "I don’t know",
-		"roger":                             "Copy that!",
-		"copy":                              "Copy!",
-		"test":                              "Tested!",
-		"ping":                              "Pong!",
-		"pong":                              "Ping!",
-		"check":                             "Checked!",
-		"done":                              "Done!",
-		"ready":                             "Ready!",
-		"start":                             "Let’s go!",
-		"go":                                "Go ahead!",
-		"stop":                              "Stop!",
-		"wait":                              "Wait a moment!",
-		"hold on":                           "Holding…",
-		"okey dokey artichokey":             "😉",
-		"brb":                               "Be right back!",
-		"afk":                               "Away from keyboard!",
-		"gtg":                               "Got to go!",
-		"back":                              "I’m back!",
-		"welcome back":                      "Welcome back!",
-		"good job":                          "Well done!",
-		"gj":                                "Well done!",
-		"tysm":                              "You’re welcome!",
-		"np":                                "No problem!",
-		"thx":                               "Thanks!",
-		"tnx":                               "Thanks!",
-		"pls":                               "Please",
-		"plz":                               "Please",
-		"sorry":                             "No worries!",
-		"sry":                               "No worries!",
-		"excuse me":                         "Yes?",
-		"hi there":                          "Hello!",
-		"hey":                               "Hey!",
-		"heya":                              "Hey!",
-		"yo":                                "Yo!",
-		"sup":                               "Sup?",
-		"wassup":                            "What’s up?",
-		"what’s up":                         "What’s up?",
-		"howdy":                             "Howdy!",
-		"greetings":                         "Greetings!",
-		"salutations":                       "Salutations!",
-		"peace":                             "✌️",
-		"love":                              "❤️",
-		"thanks a lot":                      "You’re welcome!",
-		"many thanks":                       "You’re welcome!",
-		"thx a lot":                         "You’re welcome!",
-		"cheers mate":                       "Cheers!",
-		"good evening":                      "Good evening!",
-		"ge":                                "Good evening!",
-		"evening":                           "Evening!",
-		"good afternoon":                    "Good afternoon!",
-		"ga":                                "Good afternoon!",
-		"afternoon":                         "Afternoon!",
-		"gmorning":                          "Good morning!",
-		"gnight":                            "Good night!",
-		"have fun":                          "Thanks!",
-		"good luck":                         "All the best!",
-		"gl":                                "Good luck!",
-		"congratulations":                   "Congrats!",
-		"grats":                             "Congrats!",
-		"cheers!":                           "Cheers!",
-		"yay":                               "🎉🎉",
-		"yahoo":                             "🎊🎊",
-		"wowow":                             "😲😲",
-		"coolio":                            "😎😎",
-		"alright":                           "👌👌",
-		"okey dokey":                        "👍👍",
-		"roger that":                        "Copy!",
-		"copy that":                         "Roger!",
-		"yes sir":                           "Yes!",
-		"no sir":                            "No!",
-		"affirmative":                       "Yes!",
-		"negative":                          "No!",
-		"aye aye":                           "Aye aye captain!",
-		"oh no":                             "😱",
-		"oops":                              "😅",
-		"ouch":                              "😖",
-		"yay!":                              "🎉",
-		"hurray":                            "🎊",
-		"booyah":                            "🎉",
-		"winner":                            "🏆",
-		"champion":                          "🏆",
-		"boss":                              "😎",
-		"king":                              "👑",
-		"queen":                             "👑",
-		"friend":                            "👋",
-		"buddy":                             "Hey buddy!",
-		"pal":                               "Hello pal!",
-		"mate":                              "Hello mate!",
-		"dude":                              "Hey dude!",
-		"bro":                               "Hey bro!",
-		"sis":                               "Hey sis!",
-		"fam":                               "Hey fam!",
-		"team":                              "Hi team!",
-		"class":                             "Hello class!",
-		"group":                             "Hi group!",
-		"students":                          "Hello students!",
-		"oq yo‘l":                           "rahmat!",
-		"tabriklar":                         "rahmat!",
-		"rahmat do‘stim":                    "doimo mamnunman!",
-		"kitob o‘qiyapman":                  "qaysi kitob?",
-		"kod yozyapman":                     "qaysi tilda?",
-		"ha":                                "to‘g‘ri",
-		"yo‘q":                              "xato emas",
-		"maybel":                            "ehtimol",
-		"kechirasiz":                        "muammo yo‘q",
-		"afsus":                             "ha, afsuski",
-		"jonli":                             "ha, hozir online",
-		"offline":                           "hozir yo‘q",
-		"tayyor":                            "ha, tayyor",
-		"boshladik":                         "boshladik!",
-		"kuting":                            "kutaylik bir oz",
-		"tezroq":                            "tezroq qilamiz",
-		"sekinroq":                          "sekinroq qilamiz",
-		"qiziqarli":                         "to‘g‘ri, qiziqarli",
-		"zo‘r":                              "rahmat!",
-		"ajoyib":                            "rahmat!",
-		"bor":                               "bor",
-		"menga yordam kerak":                "albatta, yozing!",
-		"salom aziz":                        "salom!",
-		"do‘st":                             "ha, salom do‘st!",
-		"aziz do‘st":                        "ha, salom!",
-		"rahmat katta":                      "doimo mamnunman!",
-		"rahmat ko‘p":                       "doimo mamnunman!",
-		"uzr":                               "muammo yo‘q",
-		"o‘rganayapman":                     "zo‘r, davom et!",
-		"sinov":                             "test muvaffaqiyatli!",
-		"qiziq":                             "ha, qiziq",
-		"ajoyib ishlading":                  "rahmat!",
-		"zo‘r ishlading":                    "rahmat!",
-		"dasturchi":                         "ha, men dasturchiman",
-		"men ham":                           "zo‘r!",
-		"xayr":                              "xayr, salomat bo‘ling!",
-		"ko‘rishguncha":                     "ko‘rishguncha!",
-		"yaxshi dam oling":                  "rahmat!",
-		"rahmat sizga":                      "doimo mamnunman!",
-		"salom do‘stlar":                    "salom, hammaga!",
-		"hammasi yaxshi":                    "zo‘r, rahmat!",
-		"baraka toping":                     "amin!",
-		"duo qilamiz":                       "ha, duo qilaylik!",
-		"tinchlik":                          "ha, tinchlik bo‘lsin",
-		"sevimli kitob":                     "qaysi kitob?",
-		"sevimli dasturlash tili":           "qaysi til?",
-		"foydali":                           "ha, foydali",
-		"zo‘r ish":                          "rahmat!",
-		"rahmat katta do‘st":                "doimo mamnunman!",
-		"o‘rganing":                         "ha, o‘rganamiz!",
-		"yo‘q, rahmat":                      "mayli",
-		"yaxshi kun":                        "sizga ham yaxshi kun!",
-		"assalomu alaykum":                  "va alaykum assalom!",
-		"alaykum assalom":                   "salom do‘st!",
-		"salom do‘st":                       "salom!",
-		"xayrli tong":                       "sizga ham xayrli tong!",
-		"xayrli kun":                        "yaxshi kun tilayman!",
-		"xayrli kech":                       "xayrli kech!",
-		"qanday ishlar?":                    "hammasi yaxshi, sizchi?",
-		"ishlaring yaxshimi":                "ha, rahmat!",
-		"nima yangilik?":                    "hech narsa, sizchi?",
-		"qayerdasiz?":                       "uydaman",
-		"hozir nima qilayapsiz?":            "kod yozayapman",
-		"yordam bera olasizmi?":             "albatta, yozing!",
-		"dasturlash bilan shug‘ullanyapman": "qaysi til?",
-		"python o‘rganayapman":              "zo‘r!",
-		"golang o‘rganayapman":              "Zo‘r, tez va sodda!",
-		"javascript bilan ishlayapman":      "JS front-end uchun ajoyib",
-		"html o‘rganayapman":                "HTML sahifa uchun kerak",
-		"css o‘rganayapman":                 "CSS bilan sahifani chiroyli qilamiz",
-		"java o‘rganayapman":                "Java backend uchun ajoyib",
-		"c++ o‘rganayapman":                 "C++ performans uchun ideal",
-		"vaqtni bilmoqchiman":               "hozirgi vaqt: 15:04",
-		"soatni bilmoqchiman":               "hozirgi vaqt: 15:04",
-		"bugun qaysi kun?":                  "bugun dushanba",
-		"hafta kunlari":                     "Dushanba, Seshanba, Chorshanba, Payshanba, Juma, Shanba, Yakshanba",
-		"dam olish":                         "ajoyib, dam oling!",
-		"motivatsiya":                       "bugun ham zo‘r ish qilamiz!",
-		"salom hazil":                       "😂😂",
-		"kulgi":                             "😄😄",
-		"hazil qil":                         "aha, quvnoq hazil!",
-		"qo‘llab quvvatla":                  "rahmat!",
-		"xayrli tun":                        "xayrli tun!",
-		"tinchiq":                           "ha, tinchlik!",
-		"kitob tavsiya":                     "qaysi janr?",
-		"film tavsiya":                      "qaysi turdagi?",
-		"musiqa tavsiya":                    "qaysi janr?",
-		"o‘qing":                            "ha, o‘qing!",
-		"ishingiz muvaffaqiyatli bo‘lsin":   "amin!",
-		"tug‘ilgan kuningiz bilan":          "tabriklar!",
-		"ish kuningiz yaxshi o‘tsin":        "rahmat!",
-		"ta’tilingiz maroqli o‘tsin":        "rahmat!",
-		"hazil qilaylik":                    "ha, hazil qilamiz!",
-		"kulamiz":                           "😂😂",
-		"juda qiziq":                        "ha, juda qiziq!",
-		"qiziqarli fakt":                    "ha, tinglaylik!",
-		"yangiliklar":                       "qaysi soha?",
-		"internet yangiliklar":              "ha, tinglaylik!",
-		"texnologiya":                       "ha, texnologiya sohasida",
-		"o‘yinlar":                          "qaysi o‘yin?",
-		"sport":                             "qaysi sport?",
-		"futbol":                            "ha, futbol zo‘r!",
-		"basketbol":                         "ha, basketbol zo‘r!",
-		"tennis":                            "ha, tennis ham zo‘r!",
-		"ping pong":                         "ha, ping pong ham qiziqarli!",
-		"musiqa":                            "qaysi janr?",
-		"rap":                               "ha, rap eshitamiz",
-		"pop":                               "pop musiqani tinglaymiz",
-		"jazz":                              "jazz tinglaymiz",
-		"klasik":                            "klasik musiqa yoqadi",
-		"kino":                              "qaysi janr?",
-		"komediya":                          "komediya kulgili",
-		"drama":                             "drama qiziqarli",
-		"tarixiy film":                      "tarixiy film qiziqarli",
-		"animatsiya":                        "bolalar uchun animatsiya",
-		"o‘yinchoqlar":                      "bolalar uchun",
-		"yozuv":                             "ha, yozaylik",
-		"she’r":                             "ha, she’r yozamiz",
-		"hikoya":                            "ha, hikoya yozamiz",
-		"BLIAT":                             "Nima bliat!",
-		"ZORKU":                             "Men ham bilsam bo‘larmikan?",
-		"RAHMAT":                            "Doimo mamnunman!",
-		"YAXSHI":                            "Unda ajoyib",
-		"YAXSHIMI":                          "Ha, yaxshi!",
-		"KITOB":                             "Qaysi kitobni o‘qiyapsiz?",
-		"DASTURLASH":                        "Zo‘r! Qaysi tilni ishlatyapsiz?",
-		"PYTHON":                            "Python juda qulay!",
-		"GOLANG":                            "Golang tez va sodda!",
-		"JAVASCRIPT":                        "JS front-end uchun ajoyib",
-		"HTML":                              "HTML sahifa uchun kerak",
-		"CSS":                               "CSS bilan sahifani chiroyli qilamiz",
-		"JAVA":                              "Java backend uchun ajoyib",
-		"C++":                               "C++ performans uchun ideal",
-		"VAQT":                              "Hozirgi vaqt: 15:04",
-		"SOAT":                              "Hozirgi vaqt: 15:04",
-		"QACHON":                            "Hozirgi vaqt: 15:04",
-		"YORDAM":                            "Menga yozing, yordam beraman!",
-		"SALOMLAR":                          "Salom, do‘stim!",
-		"NIM GAP":                           "Tinchlik",
-		"NMA GAP":                           "Tinchlik",
-		"NIMA QILASAN":                      "Kod yozayapman",
-		"NIMA QILYAPSAN":                    "Kod yozayapman",
-		"ISHINGIZ YAXSHIMI":                 "Ha, rahmat!",
-		"O‘RGANAYAPMAN":                     "Zo‘r, davom et!",
-		"SINOV":                             "Test muvaffaqiyatli!",
-		"QIZIQ":                             "Ha, qiziq!",
-		"AJOYIB ISHLADING":                  "Rahmat!",
-		"ZO‘R ISHLADING":                    "Rahmat!",
-		"DASTURCHI":                         "Ha, men dasturchiman",
-		"MEN HAM":                           "Zo‘r!",
-		"XAYR":                              "Xayr, salomat bo‘ling!",
-		"KO‘RISHGUNCHA":                     "Ko‘rishguncha!",
-		"YAXSHI DAM OLING":                  "Rahmat!",
-		"RAHMAT SIZGA":                      "Doimo mamnunman!",
-		"SALOM DO‘STLAR":                    "Salom, hammaga!",
-		"HAMMASI YAXSHI":                    "Zo‘r, rahmat!",
-		"BARAKA TOPING":                     "Amin!",
-		"DUO QILAMIZ":                       "Ha, duo qilaylik!",
-		"TINCHLIK":                          "Ha, tinchlik bo‘lsin",
-		"SEVIMLI KITOB":                     "Qaysi kitob?",
-		"SEVIMLI DASTURLASH TILI":           "Qaysi til?",
-		"FOYDALI":                           "Ha, foydali",
-		"ZO‘R ISH":                          "Rahmat!",
-		"O‘RGANING":                         "Ha, o‘rganamiz!",
-		"YO‘Q, RAHMAT":                      "Mayli",
-		"XAYRLI TUN":                        "Xayrli tun!",
-		"TINCHIQ":                           "Ha, tinchlik!",
-		"KITOB TAVSIYA":                     "Qaysi janr?",
-		"FILM TAVSIYA":                      "Qaysi turdagi?",
-		"MUSIQA TAVSIYA":                    "Qaysi janr?",
-		"O‘QING":                            "Ha, o‘qing!",
-		"ISHINGIZ MUVAFFAQIYATLI BO‘LSIN":   "Amin!",
-		"TABRIKLAR":                         "Rahmat!",
-		"TUG‘ILGAN KUNINGIZ BILAN":          "Tabriklar!",
-		"ISH KUNINGIZ YAXSHI O‘TSIN":        "Rahmat!",
-		"TA’TILINGIZ MAROQLI O‘TSIN":        "Rahmat!",
-		"HAZIL QILAYLIK":                    "Ha, hazil qilamiz!",
-		"KULAMIZ":                           "😂😂",
-		"JUDA QIZIQ":                        "Ha, juda qiziq!",
-		"QIZIQARLI FAKT":                    "Ha, tinglaylik!",
-		"YANGILIKLAR":                       "Qaysi soha?",
-		"INTERNET YANGILIKLAR":              "Ha, tinglaylik!",
-		"TEXNOLOGIYA":                       "Ha, texnologiya sohasida",
-		"O‘YINLAR":                          "Qaysi o‘yin?",
-		"SPORT":                             "Qaysi sport?",
-		"FUTBOL":                            "Ha, futbol zo‘r!",
-		"BASKETBOL":                         "Ha, basketbol zo‘r!",
-		"TENNIS":                            "Ha, tennis ham zo‘r!",
-		"PING PONG":                         "Ha, ping pong ham qiziqarli!",
-		"MUSIQA":                            "Qaysi janr?",
-		"RAP":                               "Ha, rap eshitamiz",
-		"POP":                               "Pop musiqani tinglaymiz",
-		"JAZZ":                              "Jazz tinglaymiz",
-		"KLASIK":                            "Klasik musiqa yoqadi",
-		"KINO":                              "Qaysi janr?",
-		"KOMEDIYA":                          "Komediya kulgili",
-		"DRAMA":                             "Drama qiziqarli",
-		"TARIXIY FILM":                      "Tarixiy film qiziqarli",
-		"ANIMATSIYA":                        "Bolalar uchun animatsiya",
-		"O‘YINCHOQLAR":                      "Bolalar uchun",
-		"YOZUV":                             "Ha, yozaylik",
-		"SHE’R":                             "Ha, she’r yozamiz",
-		"HIKOYA":                            "Ha, hikoya yozamiz",
-		"Zorku":                             "Men ham bilsam bo‘larmikan?",
-		"Rahmat":                            "Doimo mamnunman!",
-		"Yaxshimi":                          "Ha, yaxshi!",
-		"Kitob":                             "Qaysi kitobni o‘qiyapsiz?",
-		"Dasturlash":                        "Zo‘r! Qaysi tilni ishlatyapsiz?",
-		"Python":                            "Python juda qulay!",
-		"Golang":                            "Golang tez va sodda!",
-		"Javascript":                        "JS front-end uchun ajoyib",
-		"Html":                              "HTML sahifa uchun kerak",
-		"Css":                               "CSS bilan sahifani chiroyli qilamiz",
-		"Java":                              "Java backend uchun ajoyib",
-		"Vaqt":                              "Hozirgi vaqt: 15:04",
-		"Soat":                              "Hozirgi vaqt: 15:04",
-		"Qachon":                            "Hozirgi vaqt: 15:04",
-		"Yordam":                            "Menga yozing, yordam beraman!",
-		"Salomlar":                          "Salom, do‘stim!",
-		"Nim gap":                           "Tinchlik",
-		"Nma gap":                           "Tinchlik",
-		"Nima qilasan":                      "Kod yozayapman",
-		"Nima qilyapsan":                    "Kod yozayapman",
-		"Ishlaring yaxshimi":                "Ha, rahmat!",
-		"O‘rganayapman":                     "Zo‘r, davom et!",
-		"Sinov":                             "Test muvaffaqiyatli!",
-		"Qiziq":                             "Ha, qiziq!",
-		"Ajoyib ishlading":                  "Rahmat!",
-		"Zo‘r ishlading":                    "Rahmat!",
-		"Dasturchi":                         "Ha, men dasturchiman",
-		"Men ham":                           "Zo‘r!",
-		"Xayr":                              "Xayr, salomat bo‘ling!",
-		"Ko‘rishguncha":                     "Ko‘rishguncha!",
-		"Yaxshi dam oling":                  "Rahmat!",
-		"Rahmat sizga":                      "Doimo mamnunman!",
-		"Salom do‘stlar":                    "Salom, hammaga!",
-		"Hammasi yaxshi":                    "Zo‘r, rahmat!",
-		"Baraka toping":                     "Amin!",
-		"Duo qilamiz":                       "Ha, duo qilaylik!",
-		"Tinchlik":                          "Ha, tinchlik bo‘lsin",
-		"Sevimli kitob":                     "Qaysi kitob?",
-		"Sevimli dasturlash tili":           "Qaysi til?",
-		"Qales":                             "zo‘r o‘zingchi",
-		"Nime hamma jim zerikiw time":       "ha, tinchlikmi?",
-		"Norm":                              "zo‘r",
-		"A?":                                "ha, eshitaman",
-		"Uzbda masman":                      "qayerdansiz?",
-		"Shimkent":                          "ha, qo‘shnilarimiz 😊",
-		"Da":                                "ha",
-		"Oqiman":                            "qaysi o‘quv yurtida?",
-		"Sizi 2 ga 1 yuta olishadimi":       "ha, balki 😂",
-		"Ha":                                "to‘g‘ri",
-		"Qatga qaravotudi bu ":              "😂 bilmadim",
-		"3 ga 1 yutomagan nima divos":       "bo‘lishi mumkin 😂",
-		"Gʻa harp qandesan":                 "zo‘r, o‘zingchi 👽",
-		"Faxriddinov qonday":                "zo‘r bola u 😂",
-		"Kenzo qonday":                      "zo‘r Kenzo 😎",
-		"Norm uynci busa 1ga1 da ham meni yutadi bemalol": "demak, u kuchli o‘yinchi 👊",
-		"Sinfimdagi 2 tasi yutdi didiyu":                  "vay, shunaqami 😂",
-		"Koʻt":                                            "odob bilan gapir 😂",
-		"Хч йо":                                           "ha, jim bo‘lib qolganmiz 😅",
-		"Ha sinfdagi ikkitasi bn o'ynagan ekansz ":        "ha, shunaqa deyishyapti 😂",
-		"Qaqa":                "nima qaqa? 😂",
-		"man chiqib ketvoman": "ketmang, qoling okam",
-		"Блмадим сан кетсен манам кетаман": "yo‘q, ikkalang ham qolinglar 🥺",
-		"Da yaxshi": "zo‘r 👌",
-		"ha yaxshi mani hich kim eslagani yoq keta qolay yaxshisi": "ey yo‘q, biz eslaymiz-ku 😢",
-		"Yo jalot ma gap":              "tinchlikmi? 😄",
-		"Man esleman":                  "rahmat 😂",
-		"Denax harp":                   "hmm, shunaqami 🙂",
-		"Ha😂":                          "ha-ha 😂",
-		"hmm":                          "hmm... qiziq 😏",
-		"Tinchli":                      "tinch, o‘zingchi?",
-		"Blaaa harom🗿🦶🏿":               "asta 😂",
-		"Necinci yilsz":                "sir 😎",
-		"Aot yahshimi demon slayer mi": "ikkalasi ham zo‘r 🔥",
-		"Da nima gaplar":               "tinchlik o‘zizda?",
-		"Man bn teng ekansz":           "ha, bir avlodmiz demak 😁",
-		"Га":                           "ha 😄",
-		"@Yui_mii bye jigarim":         "bye jigar 🥺",
-		"hm":                           "hmm...",
-		"Aoti ham ey ble 2 lasi ham 😂😂 bularniyam kata va kichiginiyam": "aniq 😂",
-		"Ha👽 yomon bo'bdiyu":                     "ha, sal og‘ir bo‘ldi 😅",
-		"Nima gap ukam":                          "tinchlik, o‘zingda nima gap? 👊",
-		"Qandesan zurmisan":                      "zo‘r, o‘zingchi? 😎",
-		"kmsan🗿":                                 "shunchaki botman 🗿",
-		"norm":                                   "zo‘r-ku 😁",
-		"Ye xuyet azamatov":                      "asta 😂",
-		"Qatga ketvosan yb":                      "uyga, senchi? 🚶",
-		"km u":                                   "bir do‘stimiz 😊",
-		"Assalomu alaykum":                       "va alaykum salom 🤝",
-		"Ee. Ataylab qilyapsanmi":                "yo‘q, tasodif edi 😂",
-		"Кмни корвосз😅":                          "hech kimni, shunchaki 😅",
-		"😅":                                      " 😅",
-		"😂":                                      " 😅😎",
-		"😎":                                      "😎 😅",
-		"🚶":                                      "🚶🚶🚶🚶🚶 😅",
-		"🤝":                                      " 🗿🤝😎",
-		"😁":                                      "😁",
-		"Болад нма гапла":                        "tinchlik, sendan-chi? 😄",
-		"Nobara digan bitta qiz boridi shu qani": "yo‘q, u chiqib ketdi shekilli 🤔",
-		"Yaxshimsiz bro":                         "zo‘r, rahmat! o‘zingchi bro? 💪",
-		"Boʻladi chidasa ozizchi jigarm":         "ha, bardosh beramiz 🥲",
-		"Alo":                                    "ha",
-		"alo":                                    "ha",
-		"ALO":                                    "ha",
-		"aliyo":                                  "ha",
-		"Aliyo":                                  "ha",
-		"Yee qaytdezmi jgar":                     "ha, qaytdim jigar 😁",
-		"Bilaa qachon":                           "kecha edi shekilli ⏰",
-		"Jigarm nma gplr":                        "hech narsa, shunchaki 😄",
-		"Kim zerikdi":                            "men ham sal 😅",
-		"Man":                                    "ha, bo‘ldimi? 😂",
-		"Manam":                                  "zo‘r, unda birga o‘tiraylik 😁",
-		"Kecha soat 16:00 Lada":                  "ha, o‘sha payt 😎",
-		"Birga zerikamiz":                        "ha, bo‘ldi 😂",
-		"Jgar":                                   "ha jigar 😎",
-		"Haa men kecha chat kiralmadim bilmapman": "ha, yo‘q eding 🤔",
-		"Hou":                        "ha, bo‘ldi 😊",
-		"Qanday buldi ogritmadimi 🤣": "yo‘q, oson o‘tdi 😅",
-		"Xa":                         "xo‘p 😊",
-		"Bugun pzdes zb boʻlaman":    "ha, dam ol 😴",
-		"Tosh-Qaychi-Qog'oz":         "boshladik o‘yinni ✊✋✌️",
-		"🏁 O'yin yakunlandi!":        "zo‘r o‘yin bo‘ldi 🎮",
-		"Sekinroq yozilar":           "xo‘p, sekin yozamiz 😅",
-		"🚬🗿":                         "sog‘lom turmush tarzi yaxshi 😎",
-		"🗿":                          "😎",
-		"ha yomon bobdiyu":           "ha, sal og‘ir bo‘ldi 😅",
-		"nima gap ukam":              "tinchlik, o‘zingda nima gap? 👊",
-		"qandesan zurmisan":          "zo‘r, o‘zingchi? 😎",
-		"kmsan":                      "shunchaki botman 🗿",
-		"ye xuyet azamatov":          "asta 😂",
-		"qatga ketvosan yb":          "uyga, senchi? 🚶",
-		"Qatga ketvosan":             "uyga, senchi? 🚶",
-		"Km u":                       "bir do‘stimiz 😊",
-		"assalomu  alaykum":          "va alaykum salom 🤝",
-		"tosh-qaychi-qog'oz":         "boshladik o‘yinni ✊✋✌️",
-		"Tosh-qaychi-qog'oz":         "boshladik o‘yinni ✊✋✌️",
-		"o'yin yakunlandi!":          "zo‘r o‘yin bo‘ldi 🎮",
-		"Nma":                        "hech narsa",
-		"ama":                        "hech narsa",
-		"NMA":                        "hech narsa",
-		"Dnx":                        "So'kin ma",
-		"DNX":                        "So'kin ma",
-		"dnx":                        "So'kin ma",
-		"sikaman":                    "So'kin ma",
-		"Sikaman":                    "So'kin ma",
-		"SIKAMAN":                    "So'kin ma",
-		"pashol naxoy":               "So'kin ma",
-		"Pashol naxoy":               "So'kin ma",
-		"pashol":                     "So'kin ma",
-		"Pashol":                     "So'kin ma",
-		"kot":                        "So'kin ma",
-		"Ko't":                       "So'kin ma",
-		"naxoy":                      "So'kin ma",
-		"Naxoy":                      "So'kin ma",
-		"qanday":                     "zor ",
-		"Qanday":                     "zor ",
-		"qonday":                     "zor",
-		"Qonday":                     "zor",
-	}
-
-	// 🔄 Asosiy update sikli
+	// ---------------------------
+	// 🔥 Asosiy bot sikli
+	// ---------------------------
 	for update := range updates {
 		if update.Message == nil {
 			continue
 		}
 
-		// faqat ruxsat etilgan kanallardan xabar qabul qilish
+		// Faqat ruxsat berilgan kanallar
 		allowed := false
 		for _, id := range allowedChannelIDs {
 			if update.Message.Chat.ID == id {
@@ -625,43 +69,57 @@ func main() {
 			continue
 		}
 
-		// ✅ 1. Yangi foydalanuvchi kirsa — xush kelibsiz
+		// ----------------------------------------
+		// 🔥 1. Yangi foydalanuvchi kirsa — WELCOME
+		// ----------------------------------------
 		if len(update.Message.NewChatMembers) > 0 {
 			for _, newUser := range update.Message.NewChatMembers {
+
 				if newUser.IsBot {
 					continue
 				}
 
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID,
-					"Salom "+newUser.FirstName+"! Kanalga xush kelibsiz 🎉")
+				var msg tgbotapi.MessageConfig
+
+				if newUser.UserName != "" {
+					// @username bilan, parse mode yo'q
+					text := "Salom @" + newUser.UserName + "! Kanalga xush kelibsiz 🎉"
+					msg = tgbotapi.NewMessage(update.Message.Chat.ID, text)
+				} else {
+					// Username bo‘lmasa — HTML mention
+					escaped := html.EscapeString(newUser.FirstName)
+					htmlText := fmt.Sprintf(
+						"Salom <a href=\"tg://user?id=%d\">%s</a>! Kanalga xush kelibsiz 🎉",
+						newUser.ID, escaped)
+					msg = tgbotapi.NewMessage(update.Message.Chat.ID, htmlText)
+					msg.ParseMode = "HTML"
+				}
+
 				msg.ReplyToMessageID = update.Message.MessageID
+
 				_, err := bot.Send(msg)
 				if err != nil {
 					log.Println("Xush kelibsiz xabar yuborishda xato:", err)
 				} else {
-					log.Printf("Yangi foydalanuvchiga xush kelibsiz yuborildi: %s", newUser.FirstName)
+					log.Printf("Welcome yuborildi: %s", newUser.FirstName)
 				}
 
-				// avtomatik javob ro‘yxatiga qo‘shish
-				newUsers = append(newUsers, newUser)
+				// oxirgi userni eslab qolish
+				lastUserID = newUser.ID
+				lastMessageID = update.Message.MessageID
+				lastUserName = newUser.FirstName
 			}
 			continue
 		}
 
-		// ✅ 2. Oddiy xabar — buyruq tekshirish
+		// ----------------------------------------
+		// 🔥 2. Oddiy xabar yozgan userni eslab qolish
+		// ----------------------------------------
 		if !update.Message.From.IsBot {
-			text := update.Message.Text
-			if response, ok := commands[text]; ok {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, response)
-				msg.ReplyToMessageID = update.Message.MessageID
-				_, err := bot.Send(msg)
-				if err != nil {
-					log.Println("Buyruqqa javob berishda xato:", err)
-				} else {
-					log.Printf("Foydalanuvchi %s: %s → Javob: %s",
-						update.Message.From.FirstName, text, response)
-				}
-			}
+			lastUserID = update.Message.From.ID
+			lastMessageID = update.Message.MessageID
+			lastUserName = update.Message.From.FirstName
+			log.Printf("Oxirgi yozgan: %s (%d)", lastUserName, lastUserID)
 		}
 	}
 }
