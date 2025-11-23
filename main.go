@@ -18,7 +18,7 @@ func main() {
 
 	// ✅ 2 ta kanal/supergroup ID
 	allowedChannelIDs := []int64{
-		-1003056945596, // 1-kanal
+		-1003316396409, // 1-kanal
 		-1002338872199, // 2-kanal (shu joyga o'z ID’ingni yoz)
 	}
 
